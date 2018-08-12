@@ -11,6 +11,15 @@ _find_gemfile()
   return 1
 }
 
+_get_rakefile_mtime()
+{
+    if [ -f Rakefile ]; then
+        echo "$(stat -t %s -f %Sm Rakefile)"
+        return 0
+    fi
+    return 1
+}
+
 _rake_tasks()
 {
   echo $(rake -T --all 2>/dev/null|grep -e '^rake'|awk {'print $2'}|sed 's/:/\:/g')
@@ -31,16 +40,33 @@ _rake()
  # expensive time-wise.
  new_cwd=$PWD
  if [[ "$cur_cwd" != "$new_cwd" ||  -z "$rake_tasks" ]]; then
-   new_gemfile=$(_find_gemfile)
-   if [ $? == 1 ]; then
-     # no Gemfile found, bail
-     return 0
-   fi
+     local need_refresh_rake_task=false
 
-   if [ "$new_gemfile" != "$cur_gemfile" ]; then
-    cur_gemfile=$new_gemfile
-    rake_tasks=$(_rake_tasks)
-  fi
+     new_gemfile=$(_find_gemfile)
+     if [ $? == 1 ]; then
+         # no Gemfile found, bail
+         return 0
+     fi
+
+     if [ "$new_gemfile" != "$cur_gemfile" ]; then
+         cur_gemfile=$new_gemfile
+         # rake_tasks=$(_rake_tasks)
+         need_refresh_rake_task=true
+     fi
+
+     rakefile_mtime=$(_get_rakefile_mtime)
+     if [ $? == 1 ]; then # no Rakefile found
+         return 0
+     fi
+
+     if [ "$rakefile_mtime" != "$last_rakefile_mtime" ]; then
+         last_rakefile_mtime=$rakefile_mtime
+         need_refresh_rake_task=true
+     fi
+
+     if [ "$need_refresh_rake_task" = true ]; then
+         rake_tasks=$(_rake_tasks)
+     fi
  fi
  COMPREPLY=( $(compgen -W "${rake_tasks}"  -- ${cur}))
 }
